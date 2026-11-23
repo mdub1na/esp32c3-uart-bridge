@@ -1,0 +1,6 @@
+{
+  "target": "esp32c3",
+  "esp_idf_tag": "v5.5.2",
+  "esp_idf_commit": "30aaf64524299d3bde422ca9a2848090d1bc5d0f",
+  "source": "https://github.com/espressif/esp-idf.git"
+}

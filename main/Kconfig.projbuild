@@ -1,0 +1,21 @@
+menu "USB UART bridge"
+
+config BRIDGE_LUATOS
+    bool "LuatOS ESP32-C3 CORE with a CH343 host interface"
+    default n
+    help
+        Use UART0 for the onboard CH343 and UART1 for the target. The
+        target TX starts isolated and accepts a single framed request.
+
+config BRIDGE_INTERNAL_LOOPBACK
+    bool "TEST ONLY: internal UART loopback with automatic initial arming"
+    depends on !BRIDGE_LUATOS
+    default n
+    help
+        Test image only. Route UART1 TX to RX inside the chip and automatically
+        arm once after USB connects. GPIO1 remains an input with no pulls and
+        no peripheral output routing, including while armed. No wire jumper is
+        needed. BOOT still disarms, and a disconnect consumes the automatic arm.
+        Never use this image for communication with an external UART.
+
+endmenu

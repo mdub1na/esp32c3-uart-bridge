@@ -1,0 +1,80 @@
+{
+  "date": "2026-11-15",
+  "host": {
+    "os": "macOS 27.2.1",
+    "architecture": "arm64"
+  },
+  "board": {
+    "model": "ESP32-C3 SuperMini V1601",
+    "chip": "ESP32-C3",
+    "revision": "0.4",
+    "flash_bytes": 4194304,
+    "usb_vid": "303a",
+    "usb_pid": "1001"
+  },
+  "sdk": {
+    "target": "esp32c3",
+    "esp_idf_tag": "v5.5.2",
+    "esp_idf_commit": "30aaf64524299d3bde422ca9a2848090d1bc5d0f",
+    "source": "https://github.com/espressif/esp-idf.git"
+  },
+  "profiles": {
+    "normal": {
+      "application_bytes": 162592,
+      "application_sha256": "d3a31118958781380ce9b83bc3eefb1f77ba49ef8399bd9da317784914623447",
+      "internal_loopback": false
+    },
+    "loopback": {
+      "application_bytes": 162736,
+      "application_sha256": "09e9f2d6c3b28093985957d0a2656486cd0102ad419e30c109d301e14d80289f",
+      "internal_loopback": true
+    }
+  },
+  "validation": {
+    "host_tests": 19,
+    "native_c_state_tests": "pass with AddressSanitizer and UndefinedBehaviorSanitizer",
+    "mode_guard": "conflicting configuration rejected before compilation",
+    "internal_uart_loopback": {
+      "elapsed_seconds": 8.946446,
+      "error": null,
+      "expected_bytes": 65536,
+      "rate_limit_bytes_per_second": 9216.0,
+      "received_bytes": 65536,
+      "received_sha256": "7070bf56ba0957b90059c9e7be917ca4a6c859c05939e62d6b79f6f9b28d0aeb",
+      "sent_bytes": 65536,
+      "sent_sha256": "7070bf56ba0957b90059c9e7be917ca4a6c859c05939e62d6b79f6f9b28d0aeb",
+      "startup_capture": {
+        "elapsed_seconds": 1.001319,
+        "received_bytes": 238,
+        "received_sha256": "8299a5e3be9c47519910d50aa3244da171341a7f1964243bdccc57ade7f914be",
+        "status": "captured",
+        "stopped_by": "duration"
+      },
+      "status": "pass"
+    },
+    "normal_flash_verified": true,
+    "external_pin_loopback": "not performed",
+    "tx_voltage_or_high_impedance_measurement": "not performed",
+    "physical_button_test": {
+      "status": "pass",
+      "observer": "owner",
+      "usb_port_open": true,
+      "sequence": [
+        "receive-only slow blink",
+        "BOOT held approximately 2 seconds: steady LED",
+        "BOOT released then short press: slow blink again"
+      ]
+    },
+    "projector_connection": "not performed",
+    "rx_idle_bias": "weak internal pull-up to 3.3 V; applies only to the bridge side"
+  },
+  "initial_probe": {
+    "status": "fail",
+    "reason": "unexpected extra bytes when reset-time output was mixed with the binary test",
+    "resolution": "preserve startup ROM output separately on the same serial connection; settle and flush internal diagnostic UART after enabling loopback"
+  },
+  "initial_button_test": {
+    "status": "fault indication; arming unavailable with no UART wires attached",
+    "resolution": "enable weak RX idle-high bias; owner then confirmed the full BOOT/LED sequence"
+  }
+}

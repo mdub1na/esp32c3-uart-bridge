@@ -1,4 +1,6 @@
-if(CONFIG_BRIDGE_LUATOS)
+if(CONFIG_BRIDGE_LUATOS_RECOVERY)
+    set(bridge_sources "luatos_main.c" "d9w_recovery.c")
+elseif(CONFIG_BRIDGE_LUATOS)
     set(bridge_sources "luatos_main.c" "luatos_frame.c")
 else()
     set(bridge_sources "bridge_main.c" "bridge_control.c")

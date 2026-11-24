@@ -7,6 +7,15 @@ config BRIDGE_LUATOS
         Use UART0 for the onboard CH343 and UART1 for the target. The
         target TX starts isolated and accepts a single framed request.
 
+config BRIDGE_LUATOS_RECOVERY
+    bool "D9W recovery session over LuatOS UART"
+    depends on BRIDGE_LUATOS
+    default n
+    help
+        Opt-in profile for D9W TWRP R1. Accept nonce-bound diagnostic
+        requests and bounded operation frames. Target TX starts isolated
+        and is released after every transmitted frame.
+
 config BRIDGE_INTERNAL_LOOPBACK
     bool "TEST ONLY: internal UART loopback with automatic initial arming"
     depends on !BRIDGE_LUATOS

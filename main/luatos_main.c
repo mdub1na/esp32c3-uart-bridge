@@ -1,4 +1,11 @@
+#include "sdkconfig.h"
+
+#ifdef CONFIG_BRIDGE_LUATOS_RECOVERY
+#include "d9w_recovery.h"
+#include "esp_timer.h"
+#else
 #include "luatos_frame.h"
+#endif
 
 #include "driver/gpio.h"
 #include "driver/uart.h"
@@ -16,6 +23,16 @@
 #define UART_BAUD_RATE 115200
 #define TARGET_RX_BUFFER_SIZE 8192
 #define HOST_RX_BUFFER_SIZE 512
+
+static void write_host(const void *data, size_t size)
+{
+    const int sent = uart_write_bytes(HOST_UART, data, size);
+    ESP_ERROR_CHECK(sent == (int)size ? ESP_OK : ESP_FAIL);
+}
+
+#ifdef CONFIG_BRIDGE_LUATOS_RECOVERY
+#define HOST_MESSAGE(message) write_host(message "\r\n", sizeof(message "\r\n") - 1)
+#endif
 
 static void configure_target_tx(gpio_mode_t mode)
 {
@@ -52,6 +69,9 @@ static void configure_uarts(void)
                                  UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
     ESP_ERROR_CHECK(uart_driver_install(HOST_UART, HOST_RX_BUFFER_SIZE,
                                         0, 0, NULL, 0));
+#ifdef CONFIG_BRIDGE_LUATOS_RECOVERY
+    HOST_MESSAGE("D9W-BRIDGE HOST-READY");
+#endif
 
     ESP_ERROR_CHECK(uart_param_config(TARGET_UART, &config));
     ESP_ERROR_CHECK(uart_set_pin(TARGET_UART, UART_PIN_NO_CHANGE, TARGET_RX_GPIO,
@@ -60,12 +80,14 @@ static void configure_uarts(void)
                                         0, 0, NULL, 0));
 }
 
-static void send_line(const uint8_t *line, size_t size)
+enum tx_result { TX_SENT, TX_LOW, TX_ERROR };
+
+static enum tx_result send_line(const void *line, size_t size)
 {
     /* The attached line supplies idle high with this pad's pulls disabled. */
     for (int sample = 0; sample < 5; sample++) {
         if (!gpio_get_level(TARGET_TX_GPIO)) {
-            return;
+            return TX_LOW;
         }
         vTaskDelay(pdMS_TO_TICKS(1));
     }
@@ -73,27 +95,82 @@ static void send_line(const uint8_t *line, size_t size)
     ESP_ERROR_CHECK(gpio_set_level(TARGET_TX_GPIO, 1));
     /* In the pinned IDF, gpio_config applies open drain before output enable. */
     configure_target_tx(GPIO_MODE_INPUT_OUTPUT_OD);
+    enum tx_result result = TX_ERROR;
     if (uart_set_pin(TARGET_UART, TARGET_TX_GPIO, UART_PIN_NO_CHANGE,
                      UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE) == ESP_OK) {
-        (void)uart_write_bytes(TARGET_UART, line, size);
-        (void)uart_wait_tx_done(TARGET_UART, pdMS_TO_TICKS(25));
+        const int sent = uart_write_bytes(TARGET_UART, line, size);
+        const esp_err_t done = uart_wait_tx_done(TARGET_UART, pdMS_TO_TICKS(25));
+        if (sent == (int)size && done == ESP_OK)
+            result = TX_SENT;
     }
     release_target_tx();
+    return result;
 }
 
+#ifdef CONFIG_BRIDGE_LUATOS_RECOVERY
+static uint64_t milliseconds(void)
+{
+    return (uint64_t)esp_timer_get_time() / 1000;
+}
+
+static void send_recovery(void)
+{
+    static const char command[] = "/system/bin/reboot recovery\n";
+    switch (send_line(command, sizeof(command) - 1)) {
+    case TX_SENT:
+        HOST_MESSAGE("D9W-BRIDGE RECOVERY-SENT");
+        break;
+    case TX_LOW:
+        HOST_MESSAGE("D9W-BRIDGE RX-NOT-IDLE-HIGH");
+        break;
+    case TX_ERROR:
+        HOST_MESSAGE("D9W-BRIDGE RECOVERY-TX-ERROR");
+        break;
+    }
+}
+
+static void poll_host(struct d9w_recovery *bridge)
+{
+    uint8_t received[128];
+    const int count = uart_read_bytes(HOST_UART, received, sizeof(received), 0);
+    ESP_ERROR_CHECK(count >= 0 ? ESP_OK : ESP_FAIL);
+    for (int i = 0; i < count; i++) {
+        size_t size = 0;
+        const enum d9w_recovery_tx request =
+            d9w_recovery_receive_host(bridge, received[i], milliseconds(), &size);
+        if (request == D9W_RECOVERY_TX_REBOOT) {
+            send_recovery();
+        } else if (request == D9W_RECOVERY_TX_QUERY) {
+            /* Target frames remain raw, including replies larger than our line parser. */
+            (void)send_line(bridge->host.bytes, size);
+        }
+    }
+}
+#else
 static void poll_host(luatos_frame_t *frame)
 {
     uint8_t received[128];
     const int count = uart_read_bytes(HOST_UART, received, sizeof(received), 0);
     for (int index = 0; index < count; index++) {
         if (luatos_frame_feed(frame, received[index])) {
-            send_line(frame->line, frame->line_size);
+            (void)send_line(frame->line, frame->line_size);
         }
     }
 }
+#endif
 
 void app_main(void)
 {
+#ifdef CONFIG_BRIDGE_LUATOS_RECOVERY
+    const gpio_config_t unused = {
+        .pin_bit_mask = UINT64_C(1) << GPIO_NUM_0,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    ESP_ERROR_CHECK(gpio_config(&unused));
+#endif
     release_target_tx();
     configure_target_tx(GPIO_MODE_INPUT);
 
@@ -107,16 +184,32 @@ void app_main(void)
     ESP_ERROR_CHECK(gpio_config(&target_rx));
     configure_uarts();
 
+#ifdef CONFIG_BRIDGE_LUATOS_RECOVERY
+    HOST_MESSAGE("D9W-BRIDGE IO03-READY");
+    HOST_MESSAGE("D9W-BRIDGE ONE-SHOT-RECOVERY-READY");
+    HOST_MESSAGE("D9W-BRIDGE SESSION-READY");
+    struct d9w_recovery bridge = {0};
+#else
     luatos_frame_t frame = {0};
+#endif
     uint8_t bytes[256];
     for (;;) {
+#ifndef CONFIG_BRIDGE_LUATOS_RECOVERY
         poll_host(&frame);
+#endif
         const int received = uart_read_bytes(TARGET_UART, bytes, sizeof(bytes),
                                              pdMS_TO_TICKS(10));
         ESP_ERROR_CHECK(received >= 0 ? ESP_OK : ESP_FAIL);
         if (received > 0) {
-            const int sent = uart_write_bytes(HOST_UART, bytes, (size_t)received);
-            ESP_ERROR_CHECK(sent == received ? ESP_OK : ESP_FAIL);
+#ifdef CONFIG_BRIDGE_LUATOS_RECOVERY
+            const uint64_t now = milliseconds();
+            for (int i = 0; i < received; i++)
+                d9w_recovery_receive_target(&bridge, bytes[i], now);
+#endif
+            write_host(bytes, (size_t)received);
         }
+#ifdef CONFIG_BRIDGE_LUATOS_RECOVERY
+        poll_host(&bridge);
+#endif
     }
 }

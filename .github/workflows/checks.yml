@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [normal, loopback, luatos]
+        mode: [normal, loopback, luatos, luatos-recovery]
     steps:
       - uses: actions/checkout@v4
       - name: Build the locked firmware mode
